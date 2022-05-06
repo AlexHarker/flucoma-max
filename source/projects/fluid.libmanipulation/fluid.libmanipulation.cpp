@@ -3,6 +3,7 @@
 #include <clients/nrt/DataSetClient.hpp>
 #include <clients/nrt/DataSetQueryClient.hpp>
 #include <clients/nrt/LabelSetClient.hpp>
+#include <clients/nrt/HDBScanClient.hpp>
 #include <clients/nrt/KDTreeClient.hpp>
 #include <clients/nrt/KMeansClient.hpp>
 #include <clients/nrt/KNNClassifierClient.hpp>
@@ -42,4 +43,5 @@ void ext_main(void*)
   makeMaxWrapper<NRTThreadedGridClient>("fluid.grid~");
   makeMaxWrapper<NRTThreadedMLPRegressorClient>("fluid.mlpregressor~");
   makeMaxWrapper<NRTThreadedMLPClassifierClient>("fluid.mlpclassifier~");
+  makeMaxWrapper<NRTThreadedHDBScanClient>("fluid.hdbscan~");
 }
