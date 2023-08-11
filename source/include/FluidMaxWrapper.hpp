@@ -132,7 +132,7 @@ public:
 
     auto& client = wrapper->client();
 
-    client.sampleRate(samplerate);
+    wrapper->mClient.sampleRate(samplerate);
 
     audioInputConnections.resize(asUnsigned(client.audioChannelsIn()));
     std::copy(count, count + client.audioChannelsIn(),
@@ -1237,16 +1237,16 @@ public:
         mParamSnapshot{mParams.toTuple()}, mAutosize{true},
         mClient{initParamsFromArgs(ac, av), FluidContext()}, mDumpDictionary{nullptr}
   {
-    if (mClient.audioChannelsIn())
+    if (client().audioChannelsIn())
     {
-      assert((mClient.audioChannelsIn() <= std::numeric_limits<long>::max()));
+      assert((client().audioChannelsIn() <= std::numeric_limits<long>::max()));
       dsp_setup(impl::MaxBase::getMSPObject(),
-                static_cast<long>(mClient.audioChannelsIn()));
+                static_cast<long>(client().audioChannelsIn()));
       impl::MaxBase::getMSPObject()->z_misc |= Z_NO_INPLACE;
     }
     
     //TODO: this implicitly assumes no audio in?
-    if (index controlInputs = mClient.controlChannelsIn())
+    if (index controlInputs = client().controlChannelsIn())
     {
       if(mListSize)
       {
@@ -1340,7 +1340,7 @@ public:
                       (t_object*) outlet_new(this, nullptr));
         
     //how many non-signal outlets do we need?
-    index numDataOutlets = std::max<index>({NumOutputBuffers,mClient.controlChannelsOut().count,
+    index numDataOutlets = std::max<index>({NumOutputBuffers,client().controlChannelsOut().count,
       Client::getMessageDescriptors().size() > 0
     });
     
@@ -1349,22 +1349,22 @@ public:
     for (index i = 0; i < numDataOutlets; ++i)
         mDataOutlets.insert(mDataOutlets.begin(),outlet_new((t_object*)this,nullptr));
   
-    if (mClient.controlChannelsOut().count)
+    if (client().controlChannelsOut().count)
     {
-      index outputSize = mClient.controlChannelsOut().max > -1
-                             ? mClient.controlChannelsOut().max
+      index outputSize = client().controlChannelsOut().max > -1
+                             ? client().controlChannelsOut().max
                              : mListSize;
 
       if (outputSize)
       {
-        mOutputListData.resize(mClient.controlChannelsOut().count, outputSize);
+        mOutputListData.resize(client().controlChannelsOut().count, outputSize);
         mOutputListAtoms.reserve(outputSize);
-        for (index i = 0; i < mClient.controlChannelsOut().count; ++i)
+        for (index i = 0; i < client().controlChannelsOut().count; ++i)
           mOutputListViews.emplace_back(mOutputListData.row(i));
       }
     }
 
-    for (index i = 0; i < mClient.audioChannelsOut(); ++i)
+    for (index i = 0; i < client().audioChannelsOut(); ++i)
       outlet_new(this, "signal");
 
     Client::getParameterDescriptors().template iterate<AddListener>(this,
@@ -1551,7 +1551,7 @@ public:
 
   void resizeListHandlers(index newSize)
   {
-      index numIns = mClient.controlChannelsIn();
+      index numIns = client().controlChannelsIn();
       mListSize = newSize; 
       if(mListSize)
       {
@@ -1562,14 +1562,14 @@ public:
           mInputListViews.emplace_back(mInputListData.row(i));
         }
 
-        index outputSize = mClient.controlChannelsOut().size > -1
-                               ? mClient.controlChannelsOut().size
+        index outputSize = client().controlChannelsOut().size > -1
+                               ? client().controlChannelsOut().size
                                : mListSize;
 
-        mOutputListData.resize(mClient.controlChannelsOut().count, outputSize);
+        mOutputListData.resize(client().controlChannelsOut().count, outputSize);
         mOutputListAtoms.reserve(outputSize);
         mOutputListViews.clear();
-        for (index i = 0; i < mClient.controlChannelsOut().count; ++i)
+        for (index i = 0; i < client().controlChannelsOut().count; ++i)
         {
           mOutputListViews.emplace_back(mOutputListData.row(i));
         }
@@ -1677,7 +1677,7 @@ public:
     
   Result&       messages() { return mResult; }
   long          verbose() { return mVerbose; }
-  Client&       client() { return mClient; }
+  const Client& client() { return mClient; }
   const ParamSetType& params() { return mParams; }
   LockedParams lockedParams() { return LockedParams(mParams, mParamsLock); }
 
@@ -1833,7 +1833,7 @@ private:
     using IndexList =
         typename Client::MessageSetType::template MessageDescriptorAt<
             N>::IndexList;
-    x->client().setParams(x->params());
+    x->mClient.setParams(x->mParams);
     invokeMessageImpl<N>(x, s, ac, av, IndexList());
   }
 
