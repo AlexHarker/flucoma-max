@@ -26,6 +26,8 @@ under the European Union’s Horizon 2020 research and innovation programme
 
 #include <data/FluidMemory.hpp>
 
+#include "thread_locks.hpp"
+
 #include "MaxBufferAdaptor.hpp"
 
 #include <FluidVersion.hpp>
@@ -182,7 +184,6 @@ public:
 
     auto  wrapper = static_cast<Wrapper*>(this);
     auto& client = wrapper->mClient;
-    ATOMIC_INCREMENT(&wrapper->mInPerform);
 
     for (index i = 0; i < numins; ++i)
       if (audioInputConnections[asUnsigned(i)])
@@ -194,11 +195,11 @@ public:
       mOutputs[asUnsigned(i)].reset(outs[asUnsigned(i)], 0, sampleframes);
     }
 
+    wrapper->mParamsLock.acquire();
     client.process(mInputs, mOutputs, mContext);
+    wrapper->mParamsLock.release();
 
     if (mControlClock && !mTick.test_and_set()) clock_delay(mControlClock, 0);
-
-    ATOMIC_DECREMENT(&wrapper->mInPerform);
   }
 
   void controlData()
@@ -877,8 +878,6 @@ class FluidMaxWrapper
     static t_max_err set(FluidMaxWrapper<Client>* x, t_object* /*attr*/,
                          long ac, t_atom* av)
     {
-      while (x->mInPerform) {} // spin-wait
-      
       ParamLiteralConvertor<T, argSize> a;
       a.set(makeValue<N>());
 
@@ -887,7 +886,7 @@ class FluidMaxWrapper
       for (index i = 0; i < argSize && i < static_cast<index>(ac); i++)
         a[i] = ParamAtomConverter::fromAtom((t_object*) x, av + i, a[0]);
 
-      x->params().template set<N>(a.value(),
+      x->lockedParams().get().template set<N>(a.value(),
                                   x->verbose() ? &x->messages() : nullptr);
       printResult(x, x->messages());
       
@@ -902,8 +901,6 @@ class FluidMaxWrapper
     static t_max_err set(FluidMaxWrapper<Client>* x, t_object* /*attr*/,
                          long ac, t_atom* av)
     {
-      while (x->mInPerform) {} // spin-wait
-      
       ParamLiteralConvertor<BufferT, 1> a;
       a.set(makeValue<N>());
 
@@ -913,7 +910,7 @@ class FluidMaxWrapper
       }
       else a[0] = ParamAtomConverter::fromAtom((t_object*) x, av, a[0]);
       
-      x->params().template set<N>(a.value(),
+      x->lockedParams().get().template set<N>(a.value(),
                                   x->verbose() ? &x->messages() : nullptr);
       printResult(x, x->messages());
       
@@ -931,10 +928,9 @@ class FluidMaxWrapper
     static t_max_err set(FluidMaxWrapper<Client>* x, t_object* /*attr*/,
                          long ac, t_atom* av)
     {
-      while (x->mInPerform) {} // spin-wait
-
       x->messages().reset();
-      typename LongArrayT::type& a = x->params().template get<N>();
+
+      typename LongArrayT::type& a = x->lockedParams().get().template get<N>();
 
       a.resize(ac);
 
@@ -943,8 +939,8 @@ class FluidMaxWrapper
       for (index i = 0; i < static_cast<index>(ac); i++)
         a[i] = ParamAtomConverter::fromAtom((t_object*) x, av + i, T{});
         
-      x->params().template set<N>(std::move(a),x->verbose() ? &x->messages() : nullptr);
-        
+      x->lockedParams().get().template set<N>(std::move(a),x->verbose() ? &x->messages() : nullptr);
+
       object_attr_touch((t_object*) x, gensym("latency"));
       return MAX_ERR_NONE;
     }
@@ -957,7 +953,7 @@ class FluidMaxWrapper
                          t_atom* av)
     {
       if (!ac) return MAX_ERR_NONE;
-      while (x->mInPerform) {}
+
       x->messages().reset();
 
       /// Possible scenarios to cope with;
@@ -971,7 +967,7 @@ class FluidMaxWrapper
       /// is present, then this becomes both initial and max UNLESS max set by
       /// argument is bigger
 
-      auto a = x->params().template get<N>();
+      auto a = x->lockedParams().get().template get<N>();
 
       if (!x->mInitialized)
       {
@@ -987,8 +983,9 @@ class FluidMaxWrapper
         a = LongRuntimeMaxParam(atom_getlong(av), a.max());
       }
 
-      x->params().template set<N>(std::move(a),
+      x->lockedParams().get().template set<N>(std::move(a),
                                   x->verbose() ? &x->messages() : nullptr);
+
       printResult(x, x->messages());
       object_attr_touch((t_object*) x, gensym("latency"));
       return MAX_ERR_NONE;
@@ -1002,9 +999,10 @@ class FluidMaxWrapper
                          t_atom* av)
     {
       if (!ac) return MAX_ERR_NONE;
-      while (x->mInPerform) {}
+
       x->messages().reset();
-      auto& a = x->params().template get<N>();
+    
+      auto a = x->lockedParams().get().template get<N>();
 
       std::array<index, 4> values{a.winSize(), a.hopRaw(), a.fftRaw(),
                                   a.maxRaw()};
@@ -1030,7 +1028,7 @@ class FluidMaxWrapper
       }
 
       a = x->params().template applyConstraintsTo<N>(a);
-      x->params().template set<N>(std::move(a),
+      x->lockedParams().get().template set<N>(std::move(a),
                                   x->verbose() ? &x->messages() : nullptr);
 
       printResult(x, x->messages());
@@ -1066,8 +1064,8 @@ class FluidMaxWrapper
           a.set(pos,1);
       }
       
-      x->params().template set<N>(std::move(a), x->verbose() ? &x->messages() : nullptr);
-      
+      x->lockedParams().get().template set<N>(std::move(a), x->verbose() ? &x->messages() : nullptr);
+
       object_attr_touch((t_object*) x, gensym("latency"));
       return MAX_ERR_NONE;
     }
@@ -1644,10 +1642,45 @@ public:
     }
   }
 
+  class LockedParams
+  {
+  public:
+      
+    LockedParams(ParamSetType& p, thread_lock& l) : mParams(p), mLock(&l)
+    {
+      mLock->acquire();
+    }
+      
+    ~LockedParams()
+    {
+      if (mLock)
+        mLock->release();
+    }
+
+    LockedParams(LockedParams const&) = delete;
+    LockedParams& operator=(LockedParams const&) = delete;
+    LockedParams& operator=(LockedParams const&&) = delete;
+    
+    LockedParams(LockedParams&& other)
+    {
+      this->mParams = other.mParams;
+      this->mLock = other.mLock;
+      other.mLock = nullptr;
+    }
+    
+    ParamSetType& get() { return mParams; }
+      
+  private:
+      
+    ParamSetType& mParams;
+    thread_lock* mLock;
+  };
+    
   Result&       messages() { return mResult; }
   long          verbose() { return mVerbose; }
   Client&       client() { return mClient; }
   ParamSetType& params() { return mParams; }
+  LockedParams lockedParams() { return LockedParams(mParams, mParamsLock); }
 
   static void assistDataObject(FluidMaxWrapper* /*x*/, void* /*b*/, long io,
                                long index, char* s)
@@ -2546,7 +2579,7 @@ private:
   bool               mAutosize;
 
   Client             mClient;
-  t_int32_atomic     mInPerform{0};
+  thread_lock        mParamsLock;
   t_dictionary*      mDumpDictionary;
   std::vector<void*> mProxies;
   
