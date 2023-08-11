@@ -1438,7 +1438,7 @@ public:
 
     static constexpr index count = ParamDescType::template NumOfType<BufferT>;
     std::array<t_atom, count> bufferNames;
-    params().template forEachParamType<BufferT>([this, i = 0, &bufferNames](
+    mParams.template forEachParamType<BufferT>([this, i = 0, &bufferNames](
                                                     auto&, auto idx) mutable {
       constexpr index N = idx();
       auto b = static_cast<MaxBufferAdaptor*>(params().template get<N>().get());
@@ -1528,7 +1528,7 @@ public:
   static void doReset(FluidMaxWrapper* x)
   {
     x->mParams.fromTuple(x->mParamSnapshot);
-    x->params().template forEachParam<touchAttribute>(x);
+    x->mParams.template forEachParam<touchAttribute>(x);
     object_attr_touch((t_object*) x, gensym("latency"));
   }
 
@@ -1678,7 +1678,7 @@ public:
   Result&       messages() { return mResult; }
   long          verbose() { return mVerbose; }
   Client&       client() { return mClient; }
-  ParamSetType& params() { return mParams; }
+  const ParamSetType& params() { return mParams; }
   LockedParams lockedParams() { return LockedParams(mParams, mParamsLock); }
 
   static void assistDataObject(FluidMaxWrapper* /*x*/, void* /*b*/, long io,
@@ -1803,7 +1803,7 @@ private:
             {
               index val = currentCount < ac ? atom_getlong(av + currentCount++)
                                             : defaultValue();
-              val = mParams.template applyConstraintToMax<idx()>(val);
+              val = params().template applyConstraintToMax<idx()>(val);
               return LongRuntimeMaxParam{val, val};
             }
             else
@@ -2144,7 +2144,7 @@ private:
 
     auto messageResult = x->mClient.template invoke<N>(x->mClient, str);
     updateParams(x, messageResult);
-    x->params().template forEachParam<touchAttribute>(x);
+    x->mParams.template forEachParam<touchAttribute>(x);
 
     object_free(jsonwriter);
     if (x->checkResult(messageResult))
@@ -2307,7 +2307,7 @@ private:
 
     auto messageResult = x->mClient.template invoke<N>(x->mClient, fullpath);
     updateParams(x, messageResult);
-    x->params().template forEachParam<touchAttribute>(x);
+    x->mParams.template forEachParam<touchAttribute>(x);
     if (x->checkResult(messageResult))
       object_obex_dumpout(x, gensym("read"), 0, nullptr);
   }
