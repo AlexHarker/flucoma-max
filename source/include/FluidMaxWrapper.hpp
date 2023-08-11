@@ -1044,8 +1044,6 @@ class FluidMaxWrapper
     static t_max_err set(FluidMaxWrapper<Client>* x, t_object* /*attr*/,
                          long ac, t_atom* av)
     {
-      while (x->mInPerform) {} // spin-wait
-
       x->messages().reset();
       auto desc = x->params().template descriptorAt<N>();
             
