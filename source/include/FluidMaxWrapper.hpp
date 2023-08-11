@@ -1089,7 +1089,7 @@ class FluidMaxWrapper
       char alloc;
       atom_alloc_array(argSize, ac, av, &alloc);
 
-      a.set(x->params().template get<N>());
+      a.set(x->lockedParams().get().template get<N>());
 
       for (index i = 0; i < argSize; i++)
         ParamAtomConverter::toAtom(*av + i, a[i]);
@@ -1106,7 +1106,7 @@ class FluidMaxWrapper
                          long* ac, t_atom** av)
     {
 
-      typename LongArrayT::type& a = x->params().template get<N>();
+      typename LongArrayT::type& a = x->lockedParams().get().template get<N>();
       index                      argSize = a.size();
 
       char alloc;
@@ -1130,7 +1130,7 @@ class FluidMaxWrapper
         char alloc;
         atom_alloc_array(1, ac, av, &alloc);
         
-        atom_setlong(av[0], x->mParams.template get<N>()());
+        atom_setlong(av[0], x->lockedParams().get().template get<N>()());
         
         return MAX_ERR_NONE;
     }
@@ -1145,7 +1145,7 @@ class FluidMaxWrapper
         char alloc;
         atom_alloc_array(3, ac, av, &alloc);
         
-        auto a = x->mParams.template get<N>();
+        auto a = x->lockedParams().get().template get<N>();
         
         atom_setlong(*av, a.winSize());
         atom_setlong(*av + 1, a.hopRaw());
@@ -1164,7 +1164,7 @@ class FluidMaxWrapper
                          long* ac, t_atom** av)
     {
       
-      typename ChoicesT::type& a = x->params().template get<N>();
+      typename ChoicesT::type& a = x->lockedParams().get().template get<N>();
       auto desc = x->params().template descriptorAt<N>();
       
       index argSize = a.count();
@@ -1199,7 +1199,7 @@ class FluidMaxWrapper
                        void* sender, void* data)
     {
       if (auto p = static_cast<MaxBufferAdaptor*>(
-              x->params().template get<N>().get()))
+              x->lockedParams().get().template get<N>().get()))
         p->notify(s, msg, sender, data);
     }
   };
@@ -1211,7 +1211,7 @@ class FluidMaxWrapper
                        void* sender, void* data)
     {
       if (auto p = static_cast<const MaxBufferAdaptor*>(
-              x->params().template get<N>().get()))
+              x->lockedParams().get().template get<N>().get()))
         p->notify(s, msg, sender, data);
     }
   };
@@ -1321,10 +1321,10 @@ public:
                                                &bufferArgs));
         
         auto currentValue =
-        static_cast<MaxBufferAdaptor*>(mParams.template get<N>().get());
+        static_cast<MaxBufferAdaptor*>(lockedParams().get().template get<N>().get());
         
         if(!currentValue || currentValue->name() == gensym(""))
-          mParams.template set<N>(BufferT::type(new MaxBufferAdaptor((t_object*)this, uniqueName)),nullptr);
+          lockedParams().get().template set<N>(BufferT::type(new MaxBufferAdaptor((t_object*)this, uniqueName)),nullptr);
                 
         
     });
@@ -1646,7 +1646,8 @@ public:
   {
   public:
       
-    LockedParams(ParamSetType& p, thread_lock& l) : mParams(p), mLock(&l)
+    LockedParams(ParamSetType& p, thread_lock& l)
+    : mParams(p), mLock(&l)
     {
       mLock->acquire();
     }
@@ -2417,7 +2418,7 @@ private:
         static constexpr index Idx = N;//for MSVC
         if (ac && !x->mInitialized)
         {
-          auto  a = x->params().template get<N>(); // get the whole param
+          auto  a = x->lockedParams().get().template get<N>(); // get the whole param
           index incomingMax = atom_getlong(av);
           if (incomingMax > 0)
           {
@@ -2425,7 +2426,7 @@ private:
             incomingMax =
                 x->params().template applyConstraintToMax<Idx>(incomingMax);
             a = LongRuntimeMaxParam(a(), incomingMax);
-            x->params().template set<Idx>(
+            x->lockedParams().get().template set<Idx>(
                 std::move(a), x->verbose() ? &x->messages() : nullptr);
             printResult(x, x->messages());
           }
@@ -2455,7 +2456,7 @@ private:
         static constexpr index Idx = N;
         if(alloc)
         {
-          auto current = x->mParams.template get<Idx>();
+          auto current = x->lockedParams().get().template get<Idx>();
           atom_setlong(av[0],current.max());
         }
         return MAX_ERR_NONE;
@@ -2481,14 +2482,14 @@ private:
         static constexpr index Idx = N; //for MSVC
         if (ac && !x->mInitialized)
         {
-          auto  a = x->mParams.template get<Idx>();
+          auto  a = x->lockedParams().get().template get<Idx>();
           index newMax = atom_getlong(av);
           if (newMax > 0)
           {
             newMax = std::max(newMax, a.max());
             a = FFTParams(a.winSize(), a.hopRaw(), a.fftRaw(), newMax);
             a = x->params().template applyConstraintsTo<N>(a);
-            x->mParams.template set<Idx>(
+            x->lockedParams().get().template set<Idx>(
                 std::move(a), x->verbose() ? &x->messages() : nullptr);
           }
         }
@@ -2517,7 +2518,7 @@ private:
         static constexpr index Idx = N;
         if(alloc)
         {
-          auto current = x->mParams.template get<Idx>();
+          auto current = x->lockedParams().get().template get<Idx>();
           atom_setlong(av[0],current.maxRaw());
         }
         return MAX_ERR_NONE;
