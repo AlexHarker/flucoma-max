@@ -1640,41 +1640,47 @@ public:
     }
   }
 
-  class LockedParams
+  template <class T>
+  class LockedReference
   {
   public:
       
-    LockedParams(ParamSetType& p, thread_lock& l)
-    : mParams(p), mLock(&l)
+    LockedReference(T& ref, thread_lock& l)
+    : mRef(ref), mLock(&l)
     {
       mLock->acquire();
     }
       
-    ~LockedParams()
+    ~LockedReference()
     {
       if (mLock)
         mLock->release();
     }
 
-    LockedParams(LockedParams const&) = delete;
-    LockedParams& operator=(LockedParams const&) = delete;
-    LockedParams& operator=(LockedParams const&&) = delete;
+    LockedReference(LockedReference const&) = delete;
+    LockedReference& operator=(LockedReference const&) = delete;
+    LockedReference& operator=(LockedReference const&&) = delete;
     
-    LockedParams(LockedParams&& other)
+    LockedReference(LockedReference&& other)
     {
       this->mParams = other.mParams;
       this->mLock = other.mLock;
       other.mLock = nullptr;
     }
     
-    ParamSetType& get() { return mParams; }
+    // N.B. This reference should not be retained beyond the scope of the class
+      
+    T& get() { return mRef; }
       
   private:
       
-    ParamSetType& mParams;
+    T& mRef;
     thread_lock* mLock;
   };
     
+  using LockedParams = LockedReference<ParamSetType>;
+  using LockedClient = LockedReference<Client>;
+
   Result&       messages() { return mResult; }
   long          verbose() { return mVerbose; }
   const Client& client() { return mClient; }
