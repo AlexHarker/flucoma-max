@@ -12,7 +12,7 @@ jobs:
         with:
           branch: origin/custom/mlp-return
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4.4.0
         with:
           name: winbuild
           path: "release-packaging/FluidCorpusManipulation/externals/"
@@ -40,7 +40,7 @@ jobs:
           apppwd: ${{ secrets.APPSTORECONNECTPWD }}
           appusr: ${{ secrets.APPSTORECONNECTUSERNAME }}
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4.4.0
         with:
           name: macbuild
           path: release-packaging/FluidCorpusManipulation/
